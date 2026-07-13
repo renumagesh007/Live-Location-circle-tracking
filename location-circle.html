@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Circles — Live Location</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0B0F17;
+    color: #F2F4F8;
+  }
+  .mono { font-family: 'DM Mono', 'SFMono-Regular', Menlo, monospace; }
+
+  /* ---------- Join screen ---------- */
+  #joinWrap {
+    min-height: 100vh;
+    background: radial-gradient(circle at 30% 20%, #141B29 0%, #0B0F17 60%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  #joinCard {
+    width: 100%;
+    max-width: 420px;
+    background: #111826;
+    border: 1px solid #232C3D;
+    border-radius: 16px;
+    padding: 32px 28px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+  }
+  .eyebrow {
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    color: #5EC8D8;
+    margin-bottom: 10px;
+  }
+  h1 {
+    color: #F2F4F8;
+    font-size: 28px;
+    font-weight: 650;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+  #joinCard p {
+    color: #8A93A6;
+    font-size: 14px;
+    line-height: 1.5;
+    margin-top: 10px;
+  }
+  form { display: flex; flex-direction: column; gap: 12px; margin-top: 24px; }
+  label {
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    color: #8A93A6;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  input {
+    background: #0B0F17;
+    border: 1px solid #2A3448;
+    border-radius: 8px;
+    padding: 11px 12px;
+    color: #F2F4F8;
+    font-size: 15px;
+    font-family: inherit;
+    outline: none;
+  }
+  input:focus { border-color: #5EC8D8; }
+  #errorText { color: #E86C6C; font-size: 13px; display: none; }
+  button.primary {
+    margin-top: 6px;
+    background: #F2B94A;
+    color: #0B0F17;
+    border: none;
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 15px;
+    font-weight: 650;
+    cursor: pointer;
+  }
+  .hint {
+    margin-top: 20px;
+    font-size: 12px;
+    color: #5C6579;
+    line-height: 1.5;
+    border-top: 1px solid #1D2534;
+    padding-top: 16px;
+  }
+
+  /* ---------- Live screen ---------- */
+  #liveWrap {
+    position: relative;
+    width: 100%;
+    height: 100vh;
+    background: #0B0F17;
+    overflow: hidden;
+    display: none;
+  }
+  #map { position: absolute; inset: 0; }
+  #topBar {
+    position: absolute;
+    top: 16px; left: 16px; right: 16px;
+    z-index: 500;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    pointer-events: none;
+  }
+  #circleLabel {
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    background: #111826EE;
+    border: 1px solid #232C3D;
+    padding: 8px 12px;
+    border-radius: 8px;
+    pointer-events: auto;
+  }
+  #statusLine {
+    margin-top: 6px;
+    font-size: 11px;
+    color: #8A93A6;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding-left: 4px;
+  }
+  .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; background: #E8A33D; }
+  #leaveBtn {
+    pointer-events: auto;
+    background: #111826EE;
+    border: 1px solid #232C3D;
+    color: #E86C6C;
+    font-size: 12px;
+    padding: 8px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  #warnBanner {
+    position: absolute;
+    top: 70px; left: 16px; right: 16px;
+    z-index: 500;
+    background: #2A1E1EEE;
+    border: 1px solid #4A2E2E;
+    color: #E8B4B4;
+    font-size: 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    display: none;
+  }
+  #panel {
+    position: absolute;
+    bottom: 16px; left: 16px;
+    width: 280px;
+    max-height: 45vh;
+    background: #111826EE;
+    border: 1px solid #232C3D;
+    border-radius: 12px;
+    z-index: 500;
+    display: flex;
+    flex-direction: column;
+    backdrop-filter: blur(6px);
+  }
+  #panelHeader {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 14px;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    color: #5C6579;
+    border-bottom: 1px solid #1D2534;
+  }
+  #memberScroll { overflow-y: auto; padding: 4px 6px; }
+  .emptyState { padding: 14px 10px; font-size: 12px; color: #5C6579; }
+  .memberRow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 8px;
+    border-radius: 8px;
+  }
+  .memberDot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .memberName {
+    font-size: 13px; font-weight: 550;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .memberMeta { color: #5C6579; font-size: 11px; margin-top: 1px; }
+  .locateBtn {
+    background: transparent;
+    border: 1px solid #2A3448;
+    color: #8A93A6;
+    font-size: 10px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  #followBtn {
+    position: absolute;
+    bottom: 16px; right: 16px;
+    z-index: 500;
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    background: #111826EE;
+    border: 1px solid #232C3D;
+    color: #8A93A6;
+    font-size: 18px;
+    cursor: pointer;
+  }
+  #followBtn.active { color: #0B0F17; background: #F2B94A; border-color: #F2B94A; }
+  .leaflet-tooltip.circle-tip {
+    background: #111826; color: #F2F4F8; border: 1px solid #232C3D;
+    font-size: 11px; padding: 3px 7px;
+  }
+</style>
+</head>
+<body>
+
+<div id="joinWrap">
+  <div id="joinCard">
+    <div class="eyebrow mono">LIVE LOCATION · CIRCLES</div>
+    <h1>Find your people.</h1>
+    <p>Enter a circle code to share live location with everyone in it. Anyone with the same code sees the same map, in real time.</p>
+    <form id="joinForm">
+      <label class="mono">Circle code
+        <input id="circleCodeInput" placeholder="e.g. SUMMER-TRIP" autocapitalize="characters" />
+      </label>
+      <label class="mono">Your name
+        <input id="nameInput" placeholder="e.g. Priya" />
+      </label>
+      <div id="errorText" class="mono"></div>
+      <button type="submit" class="primary">Join circle</button>
+    </form>
+    <div class="hint">Share the same code with friends or family — everyone who joins with it appears on everyone else's map. Locations are visible only to people who know the code.</div>
+  </div>
+</div>
+
+<div id="liveWrap">
+  <div id="map"></div>
+
+  <div id="topBar">
+    <div>
+      <div id="circleLabel" class="mono"></div>
+      <div id="statusLine"><span class="dot" id="statusDot"></span><span id="statusText">Finding your location…</span></div>
+    </div>
+    <button id="leaveBtn" class="mono">Leave</button>
+  </div>
+
+  <div id="warnBanner">Enable location access in your browser to share your position. You can still see others in this circle.</div>
+
+  <div id="panel">
+    <div id="panelHeader" class="mono">
+      <span>IN THIS CIRCLE</span>
+      <span id="panelCount">0</span>
+    </div>
+    <div id="memberScroll"></div>
+  </div>
+
+  <button id="followBtn" title="Follow my location">◎</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(function () {
+  const MEMBER_COLORS = ['#5EC8D8', '#E8A33D', '#8FBF6E', '#C77DD2', '#E86C6C', '#7A9CE0'];
+  const YOU_COLOR = '#F2B94A';
+  const STALE_MS = 3 * 60 * 1000;
+
+  function colorForId(id) {
+    let h = 0;
+    for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+    return MEMBER_COLORS[h % MEMBER_COLORS.length];
+  }
+  function timeAgo(ts) {
+    const s = Math.floor((Date.now() - ts) / 1000);
+    if (s < 10) return 'just now';
+    if (s < 60) return s + 's ago';
+    const m = Math.floor(s / 60);
+    if (m < 60) return m + 'm ago';
+    return Math.floor(m / 60) + 'h ago';
+  }
+  function distanceMeters(a, b) {
+    if (!a || !b) return null;
+    const R = 6371000;
+    const dLat = (b.lat - a.lat) * Math.PI / 180;
+    const dLng = (b.lng - a.lng) * Math.PI / 180;
+    const lat1 = a.lat * Math.PI / 180, lat2 = b.lat * Math.PI / 180;
+    const x = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLng/2)**2;
+    return 2 * R * Math.asin(Math.sqrt(x));
+  }
+  function formatDistance(m) {
+    if (m == null) return '';
+    return m < 1000 ? Math.round(m) + ' m' : (m/1000).toFixed(1) + ' km';
+  }
+
+  const myId = 'm_' + Math.random().toString(36).slice(2, 10);
+  let circleCode = '';
+  let myName = '';
+  let myPos = null;
+  let followMe = true;
+  let map = null;
+  let watchId = null;
+  let pollTimer = null;
+  const markers = {};   // id -> leaflet marker
+  const lines = {};     // id -> leaflet polyline
+  const trails = {};    // id -> [ [lat,lng], ... ]
+  let members = {};      // id -> {name, lat, lng, updatedAt, color}
+
+  const memberKey = (code, id) => `circle:${code}:member:${id}`;
+
+  const joinWrap = document.getElementById('joinWrap');
+  const liveWrap = document.getElementById('liveWrap');
+  const errorText = document.getElementById('errorText');
+  const statusDot = document.getElementById('statusDot');
+  const statusText = document.getElementById('statusText');
+  const warnBanner = document.getElementById('warnBanner');
+  const circleLabel = document.getElementById('circleLabel');
+  const panelCount = document.getElementById('panelCount');
+  const memberScroll = document.getElementById('memberScroll');
+  const followBtn = document.getElementById('followBtn');
+
+  document.getElementById('joinForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    const code = document.getElementById('circleCodeInput').value.trim().toUpperCase();
+    const nm = document.getElementById('nameInput').value.trim();
+    errorText.style.display = 'none';
+    if (!code || !nm) {
+      errorText.textContent = 'Enter a circle code and your name.';
+      errorText.style.display = 'block';
+      return;
+    }
+    circleCode = code;
+    myName = nm;
+    circleLabel.textContent = circleCode;
+    joinWrap.style.display = 'none';
+    liveWrap.style.display = 'block';
+    initMap();
+    startGeolocation();
+    startPolling();
+  });
+
+  document.getElementById('leaveBtn').addEventListener('click', async function () {
+    if (watchId != null) navigator.geolocation.clearWatch(watchId);
+    if (pollTimer) clearInterval(pollTimer);
+    try { await window.storage.delete(memberKey(circleCode, myId), true); } catch (e) {}
+    location.reload();
+  });
+
+  followBtn.addEventListener('click', function () {
+    followMe = true;
+    followBtn.classList.add('active');
+    if (myPos && map) map.setView([myPos.lat, myPos.lng], 15, { animate: true });
+  });
+
+  function setStatus(status) {
+    const colors = { locating: '#E8A33D', active: '#8FBF6E', denied: '#E86C6C', error: '#E86C6C' };
+    const texts = {
+      locating: 'Finding your location…',
+      active: 'Sharing your location',
+      denied: 'Location permission denied',
+      error: 'Location unavailable',
+    };
+    statusDot.style.background = colors[status] || '#E8A33D';
+    statusText.textContent = texts[status] || '';
+    warnBanner.style.display = (status === 'denied' || status === 'error') ? 'block' : 'none';
+  }
+
+  function initMap() {
+    map = L.map('map', { zoomControl: false, attributionControl: false }).setView([20, 0], 3);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(map);
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+    L.control.attribution({ position: 'bottomleft', prefix: false }).addAttribution('© OpenStreetMap, © CARTO').addTo(map);
+
+    // user-initiated pan/zoom should release auto-follow
+    map.on('dragstart', function () { followMe = false; followBtn.classList.remove('active'); });
+  }
+
+  function startGeolocation() {
+    if (!navigator.geolocation) {
+      setStatus('error');
+      return;
+    }
+    setStatus('locating');
+    watchId = navigator.geolocation.watchPosition(
+      async function (pos) {
+        setStatus('active');
+        const lat = pos.coords.latitude, lng = pos.coords.longitude;
+        myPos = { lat, lng };
+        try {
+          await window.storage.set(
+            memberKey(circleCode, myId),
+            JSON.stringify({ name: myName, lat, lng, updatedAt: Date.now() }),
+            true
+          );
+        } catch (e) { console.error('storage set failed', e); }
+        renderAll();
+      },
+      function (err) { setStatus(err.code === 1 ? 'denied' : 'error'); },
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
+    );
+  }
+
+  function startPolling() {
+    async function poll() {
+      try {
+        const list = await window.storage.list(`circle:${circleCode}:member:`, true);
+        if (!list || !list.keys) return;
+        const next = {};
+        for (const k of list.keys) {
+          try {
+            const res = await window.storage.get(k, true);
+            if (!res) continue;
+            const data = JSON.parse(res.value);
+            const id = k.split(':').pop();
+            if (Date.now() - data.updatedAt > STALE_MS) continue;
+            next[id] = Object.assign({}, data, { color: id === myId ? YOU_COLOR : colorForId(id) });
+          } catch (e) {}
+        }
+        members = next;
+        renderAll();
+      } catch (e) { console.error('poll failed', e); }
+    }
+    poll();
+    pollTimer = setInterval(poll, 4000);
+  }
+
+  function renderAll() {
+    renderMap();
+    renderPanel();
+  }
+
+  function renderMap() {
+    if (!map) return;
+    const allIds = Object.keys(members);
+
+    allIds.forEach(function (id) {
+      const m = members[id];
+      const pos = [m.lat, m.lng];
+      const isYou = id === myId;
+
+      if (!trails[id]) trails[id] = [];
+      const t = trails[id];
+      const last = t[t.length - 1];
+      if (!last || last[0] !== pos[0] || last[1] !== pos[1]) {
+        t.push(pos);
+        if (t.length > 20) t.shift();
+      }
+
+      if (!markers[id]) {
+        const html = '<div style="width:16px;height:16px;border-radius:50%;background:' + m.color +
+          ';border:2px solid #0B0F17;box-shadow:0 0 0 3px ' + m.color + '55;"></div>';
+        const icon = L.divIcon({ html: html, className: '', iconSize: [16, 16] });
+        const marker = L.marker(pos, { icon: icon }).addTo(map);
+        marker.bindTooltip(
+          '<div class="mono">' + (isYou ? 'You' : m.name) + '</div>',
+          { permanent: false, direction: 'top', offset: [0, -8], className: 'circle-tip' }
+        );
+        const line = L.polyline(t, { color: m.color, weight: 2, opacity: 0.35 }).addTo(map);
+        markers[id] = marker;
+        lines[id] = line;
+      } else {
+        markers[id].setLatLng(pos);
+        lines[id].setLatLngs(t);
+      }
+    });
+
+    Object.keys(markers).forEach(function (id) {
+      if (allIds.indexOf(id) === -1) {
+        map.removeLayer(markers[id]);
+        map.removeLayer(lines[id]);
+        delete markers[id];
+        delete lines[id];
+        delete trails[id];
+      }
+    });
+
+    if (followMe && myPos) {
+      map.setView([myPos.lat, myPos.lng], Math.max(map.getZoom(), 14), { animate: true });
+    } else if (!myPos && allIds.length) {
+      const pts = allIds.map(function (id) { return [members[id].lat, members[id].lng]; });
+      map.fitBounds(pts, { padding: [60, 60] });
+    }
+  }
+
+  function renderPanel() {
+    const ids = Object.keys(members).sort(function (a, b) {
+      return a === myId ? -1 : b === myId ? 1 : 0;
+    });
+    panelCount.textContent = ids.length;
+    memberScroll.innerHTML = '';
+    if (ids.length === 0) {
+      const div = document.createElement('div');
+      div.className = 'emptyState';
+      div.textContent = 'Waiting for members to appear…';
+      memberScroll.appendChild(div);
+      return;
+    }
+    ids.forEach(function (id) {
+      const m = members[id];
+      const row = document.createElement('div');
+      row.className = 'memberRow';
+
+      const dot = document.createElement('span');
+      dot.className = 'memberDot';
+      dot.style.background = m.color;
+
+      const info = document.createElement('div');
+      info.style.flex = '1';
+      info.style.minWidth = '0';
+
+      const nameEl = document.createElement('div');
+      nameEl.className = 'memberName';
+      nameEl.textContent = id === myId ? m.name + ' (you)' : m.name;
+
+      const metaEl = document.createElement('div');
+      metaEl.className = 'memberMeta mono';
+      let meta = timeAgo(m.updatedAt);
+      if (myPos && id !== myId) meta += ' · ' + formatDistance(distanceMeters(myPos, m)) + ' away';
+      metaEl.textContent = meta;
+
+      info.appendChild(nameEl);
+      info.appendChild(metaEl);
+      row.appendChild(dot);
+      row.appendChild(info);
+
+      if (id !== myId) {
+        const btn = document.createElement('button');
+        btn.className = 'locateBtn mono';
+        btn.textContent = 'Locate';
+        btn.addEventListener('click', function () {
+          followMe = false;
+          followBtn.classList.remove('active');
+          if (map) map.setView([m.lat, m.lng], 15, { animate: true });
+        });
+        row.appendChild(btn);
+      }
+      memberScroll.appendChild(row);
+    });
+  }
+})();
+</script>
+</body>
+</html>
